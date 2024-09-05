@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Leaflet Draw with Google Maps-like Functionality</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+
+  <!-- Leaflet Draw CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-draw/dist/leaflet.draw.css" />
+
+  <style>
+    /* Make the map fill the entire viewport */
+    html, body {
+      height: 100%;
+      margin: 0;
+    }
+    #map {
+      height: 100%;
+      width: 100%;
+    }
+    /* Custom marker icon for the draw tool */
+    .leaflet-draw-toolbar a.leaflet-draw-draw-marker {
+      background-image: url('https://cdn.iconscout.com/icon/free/png-256/gun-1449646-1226281.png') !important;
+      background-size: cover;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+  <!-- Leaflet Draw JS -->
+  <script src="https://unpkg.com/leaflet-draw/dist/leaflet.draw.js"></script>
+
+  <script>
+    // Initialize the map
+    const map = L.map('map').setView([51.505, -0.09], 13);
+
+    // Add Esri's satellite tile layer
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{x}/{y}', {
+      attribution: '&copy; <a href="https://www.esri.com">Esri</a> &mdash; Source: Esri, USGS, NOAA',
+      maxZoom: 18,
+    }).addTo(map);
+
+    // Initialize the draw feature group
+    const drawnItems = new L.FeatureGroup();
+    map.addLayer(drawnItems);
+
+    // Configure draw control and set custom marker icon
+    const drawControl = new L.Control.Draw({
+      edit: {
+        featureGroup: drawnItems,
+      },
+      draw: {
+        marker: {
+          icon: L.icon({
+            iconUrl: 'https://cdn.iconscout.com/icon/free/png-256/gun-1449646-1226281.png',
+            iconSize: [32, 32], // Custom marker icon size
+          }),
+        },
+      },
+    });
+    map.addControl(drawControl);
+
+    // Variable to track when drawing starts
+    let isDrawing = false;
+
+    // Enable seamless scrolling/panning during drawing
+    map.on('draw:drawstart', function (e) {
+      isDrawing = true;
+      map.on('mousemove', allowPanningDuringDrawing);
+    });
+
+    // Disable panning after drawing is done
+    map.on('draw:drawstop', function (e) {
+      isDrawing = false;
+      map.off('mousemove', allowPanningDuringDrawing);
+    });
+
+    // Allow panning while drawing shapes like polygons
+    function allowPanningDuringDrawing(e) {
+      if (isDrawing) {
+        map.dragging.enable(); // Enable map panning
+      }
+    }
+
+    // Handle created shapes
+    map.on(L.Draw.Event.CREATED, function (event) {
+      const layer = event.layer;
+      const type = event.layerType;
+
+      // Ask for the shape's name
+      const shapeName = prompt("Please enter the name of this shape:");
+
+      if (shapeName) {
+        layer.bindPopup(`<b>${shapeName}</b>`);
+        drawnItems.addLayer(layer);
+
+        // Save the data locally in the browser
+        const geojsonData = drawnItems.toGeoJSON();
+        localStorage.setItem("drawnShapes", JSON.stringify(geojsonData));
+
+        // Calculate and show the area if the drawn shape is a polygon
+        if (type === "polygon" || type === "rectangle") {
+          const area = L.GeometryUtil.geodesicArea(layer.getLatLngs()[0]);
+          const areaInHectares = (area / 10000).toFixed(2);
+          layer.bindPopup(`<b>${shapeName}</b><br>Area: ${areaInHectares} ha`);
+        }
+      }
+    });
+
+    // Load shapes from localStorage
+    const savedShapes = localStorage.getItem("drawnShapes");
+    if (savedShapes) {
+      const geoJsonLayer = L.geoJSON(JSON.parse(savedShapes), {
+        onEachFeature: function (feature, layer) {
+          layer.bindPopup(`<b>${feature.properties.name}</b><br>Area: ${feature.properties.area} ha`);
+        }
+      });
+      geoJsonLayer.addTo(map);
+    }
+  </script>
+</body>
+</html>
